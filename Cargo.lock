@@ -311,6 +311,7 @@ dependencies = [
  "crossterm 0.29.0",
  "ratatui",
  "ratatui-code-editor",
+ "regex",
 ]
 
 [[package]]

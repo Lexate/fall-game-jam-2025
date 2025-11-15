@@ -3,23 +3,27 @@ use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{DefaultTerminal, Frame, layout::Position, layout::Rect, widgets::Widget};
 use ratatui_code_editor::editor::Editor;
 use ratatui_code_editor::theme::vesper;
-use std::io;
+use std::io::{self, Write};
 use std::rc::Rc;
 
-use std::process::Command;
-
+use regex::Regex;
+use std::fs::{self, File};
+use std::process::{Command, Output};
 fn main() -> anyhow::Result<()> {
-    let mut spec_command = if cfg!(target_os = "windows") {
-        Command::new("cmd")
-    } else {
-        Command::new("sh")
-    };
-    if !test_compilers(&mut spec_command) {
+    if !test_compilers() {
         println!("You need to have Bun and python3 installed to run this game");
     }
 
+    let utp = compiler(
+        "hello".to_string(),
+        "print('helawlo!')".to_string(),
+        "python3",
+    );
+    println!("output: {}, success: {}", utp.output, utp.success);
+
     let mut terminal = ratatui::init();
     let mut app = App::new();
+
     // let app_result = app.run(&mut terminal);
     ratatui::restore();
     // app_result
@@ -106,8 +110,8 @@ impl Widget for &App {
     }
 }
 
-fn test_compilers(command: &mut Command) -> bool {
-    let output = command
+fn test_compilers() -> bool {
+    let output = Command::new("sh")
         .args([
             "-c",
             "python3",
@@ -127,4 +131,42 @@ fn test_compilers(command: &mut Command) -> bool {
         Err(e) => eprintln!("{}", e),
     }
     return output.stderr.len() < 1;
+}
+
+struct CompilerReturn {
+    success: bool,
+    output: String,
+}
+fn compiler(regex: String, input: String, language: &str) -> CompilerReturn {
+    let name = "temp.tmp";
+    let mut file = File::create(name).unwrap();
+    write!(file, "{}", input).unwrap();
+
+    let utp = Command::new("sh")
+        .arg("-c")
+        .arg(format!("{language} {name}"))
+        .output()
+        .unwrap();
+
+    let error_or_message = String::from_utf8(pretty_print_output(utp)).unwrap();
+
+    let re = Regex::new(&regex).unwrap();
+
+    let cap = match re.captures(&error_or_message) {
+        Some(t) => t.len() != 0,
+        None => false,
+    };
+    // println!("Test: {}", error_or_message);
+    return CompilerReturn {
+        success: cap,
+        output: error_or_message,
+    };
+}
+
+fn pretty_print_output(output: Output) -> Vec<u8> {
+    if output.stderr.len() > 1 {
+        return output.stderr;
+    } else {
+        return output.stdout;
+    }
 }
