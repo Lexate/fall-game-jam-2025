@@ -1,8 +1,11 @@
 #![expect(dead_code)]
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use ratatui::layout::{Constraint, Flex, Layout};
+use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::{DefaultTerminal, Frame, layout::Position, layout::Rect, widgets::Widget};
 use ratatui_code_editor::editor::Editor;
 use ratatui_code_editor::theme::vesper;
+use std::io;
 use std::io::{self, Write};
 use std::rc::Rc;
 
@@ -31,7 +34,6 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[derive()]
 struct App {
     editor: Editor,
     editor_area: Rect,
@@ -42,7 +44,11 @@ struct App {
 impl App {
     fn new() -> Self {
         App {
-            editor: Editor::new("rust", "test", vesper()),
+            editor: Editor::new(
+                "rust",
+                "fn main() {\n    println!(\"Hello, world!\");\n}",
+                vesper(),
+            ),
             editor_area: Rect::default(),
             counter: 0,
             exit: false,
@@ -63,7 +69,7 @@ impl App {
 
         let cursor = self.editor.get_visible_cursor(&area);
         if let Some((x, y)) = cursor {
-            frame.set_cursor_position(Position::new(x, y));
+            frame.set_cursor_position(Position::new(x, y + 3));
         }
         self.set_area(area);
     }
@@ -83,21 +89,37 @@ impl App {
     fn handle_key_event(&mut self, key_event: KeyEvent) -> io::Result<()> {
         match key_event.code {
             KeyCode::Esc => self.exit(),
+            KeyCode::F(5) => self.check(),
             _ => self.editor.input(key_event, &self.editor_area).unwrap(),
         }
         Ok(())
     }
 
     fn set_area(&mut self, area: Rect) {
-        self.editor_area = area;
+        let areas = Layout::vertical([
+            Constraint::Max(3),
+            Constraint::Fill(1),
+            Constraint::Max(20),
+            Constraint::Max(1),
+        ])
+        .split(area);
+        self.editor_area = areas[1];
     }
 
     fn exit(&mut self) {
         self.exit = true;
     }
 
+    fn check(&self) {
+        todo!()
+    }
+
     fn get_editor_content(&self) -> String {
         self.editor.get_content()
+    }
+
+    fn set_editor_content(&mut self, content: &str) {
+        self.editor.set_content(content);
     }
 }
 
@@ -106,7 +128,36 @@ impl Widget for &App {
     where
         Self: Sized,
     {
-        self.editor.render(area, buf);
+        let areas = Layout::vertical([
+            Constraint::Max(3),
+            Constraint::Fill(1),
+            Constraint::Max(20),
+            Constraint::Max(1),
+        ])
+        .split(area);
+        Paragraph::new("problem")
+            .centered()
+            .block(Block::bordered().borders(Borders::BOTTOM))
+            .render(areas[0], buf);
+
+        self.editor.render(areas[1], buf);
+
+        Paragraph::new(self.get_editor_content())
+            .block(Block::bordered().title("Output"))
+            .render(areas[2], buf);
+
+        Paragraph::new("Stats").render(areas[3], buf);
+    }
+}
+
+struct Problem {
+    initial_problem: String,
+    check_regex: String,
+}
+
+impl Problem {
+    fn diff(&self, comparison: String) -> usize {
+        todo!()
     }
 }
 
