@@ -1,17 +1,10 @@
 #![expect(dead_code)]
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
-use ratatui::{
-    DefaultTerminal, Frame, Terminal,
-    layout::Position,
-    layout::Rect,
-    style::Stylize,
-    symbols::border,
-    text::{Line, Text},
-    widgets::{Block, Paragraph, Widget},
-};
+use ratatui::{DefaultTerminal, Frame, layout::Position, layout::Rect, widgets::Widget};
 use ratatui_code_editor::editor::Editor;
 use ratatui_code_editor::theme::vesper;
 use std::io;
+use std::rc::Rc;
 
 fn main() -> anyhow::Result<()> {
     let mut terminal = ratatui::init();
