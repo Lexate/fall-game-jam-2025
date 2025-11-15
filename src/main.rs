@@ -6,10 +6,21 @@ use ratatui_code_editor::theme::vesper;
 use std::io;
 use std::rc::Rc;
 
+use std::process::Command;
+
 fn main() -> anyhow::Result<()> {
+    let mut spec_command = if cfg!(target_os = "windows") {
+        Command::new("cmd")
+    } else {
+        Command::new("sh")
+    };
+    if !test_compilers(&mut spec_command) {
+        println!("You need to have Bun and python3 installed to run this game");
+    }
+
     let mut terminal = ratatui::init();
     let mut app = App::new();
-    let app_result = app.run(&mut terminal);
+    // let app_result = app.run(&mut terminal);
     ratatui::restore();
     // app_result
     println!("{}", app.get_editor_content());
@@ -93,4 +104,27 @@ impl Widget for &App {
     {
         self.editor.render(area, buf);
     }
+}
+
+fn test_compilers(command: &mut Command) -> bool {
+    let output = command
+        .args([
+            "-c",
+            "python3",
+            "--version",
+            "&&",
+            "bun",
+            "--version",
+            "&&",
+            "rustc",
+            "--version",
+        ])
+        .output()
+        .expect("Could not execute tests");
+    let cp = output.clone();
+    match String::from_utf8(cp.stderr) {
+        Ok(data) => println!("Err: {}", data),
+        Err(e) => eprintln!("{}", e),
+    }
+    return output.stderr.len() < 1;
 }
