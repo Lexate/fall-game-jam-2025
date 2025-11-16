@@ -1,19 +1,13 @@
 use std::mem::swap;
 
-pub struct Problem<L>
-where
-    L: languages::Language,
-{
+pub struct Problem {
     pub request: String,
     pub initial_problem: String,
-    pub language: L,
+    pub language: Language,
     pub check_regex: String,
 }
 
-impl<L> Problem<L>
-where
-    L: languages::Language,
-{
+impl Problem {
     pub fn diff(&self, comparison: String) -> usize {
         minimum_edit_distance(&self.initial_problem, &comparison)
     }
@@ -23,52 +17,33 @@ where
     }
 }
 
-pub mod languages {
-    pub trait Language {
-        fn format_command(file_name: &str) -> String;
+pub enum Language {
+    Rust,
+    Python,
+    TypeScript,
+}
 
-        fn name_string() -> String;
-
-        fn clean_up() -> String {
-            "".to_string()
-        }
-    }
-    pub struct Python;
-
-    impl Language for Python {
-        fn format_command(file_name: &str) -> String {
-            format!("python3 {file_name}")
-        }
-
-        fn name_string() -> String {
-            "python".to_string()
+impl Language {
+    pub fn format_command(&self, file_name: &str) -> String {
+        match self {
+            Self::Rust => format!("rustc {file_name} -o temp_prog && ./temp_prog"),
+            Self::Python => format!("python3 {file_name}"),
+            Self::TypeScript => format!("bun run {file_name}"),
         }
     }
 
-    pub struct Rust;
-
-    impl Language for Rust {
-        fn format_command(file_name: &str) -> String {
-            format!("rustc {file_name} -o temp_prog && ./temp_prog")
-        }
-
-        fn name_string() -> String {
-            "rust".to_string()
-        }
-
-        fn clean_up() -> String {
-            "./temp_prog".to_string()
+    pub fn name_string(&self) -> String {
+        match self {
+            Self::Rust => "rust".to_string(),
+            Self::Python => "python".to_string(),
+            Self::TypeScript => "typescript".to_string(),
         }
     }
 
-    pub struct Typescript;
-    impl Language for Typescript {
-        fn format_command(file_name: &str) -> String {
-            format!("bun run {file_name}")
-        }
-
-        fn name_string() -> String {
-            "typescript".to_string()
+    pub fn clean_up(&self) -> String {
+        match self {
+            Self::Rust => "./temp_prog".to_string(),
+            _ => "".to_string(),
         }
     }
 }
