@@ -222,7 +222,7 @@ impl<T: Iterator<Item = Problem>> Widget for &App<T> {
         Paragraph::new(self.output.clone())
             .wrap(Wrap { trim: true })
             .scroll((self.scroll, 0))
-            .block(Block::bordered().title("Output ( f1=↑ , f2=↓ )"))
+            .block(Block::bordered().title("Output ( f1=↑ , f2=↓ , f5 = ↺ )"))
             .render(areas[2], buf);
 
         Paragraph::new(self.get_status_bar()).render(areas[3], buf);
