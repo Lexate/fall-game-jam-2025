@@ -1,7 +1,6 @@
 #![expect(dead_code)]
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
-use ratatui::layout::{Constraint, Flex, Layout};
-use ratatui::style::Stylize;
+use ratatui::layout::{Constraint, Layout};
 use ratatui::text::Text;
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::{DefaultTerminal, Frame, layout::Position, layout::Rect, widgets::Widget};
@@ -11,21 +10,24 @@ use std::io::{self, Write};
 use std::mem::swap;
 
 use regex::Regex;
-use std::fs::{self, File};
+use std::fs::File;
 use std::process::{Command, Output};
 
-fn main() -> anyhow::Result<()> {
+use std::time::SystemTime;
+
+fn main() -> io::Result<()> {
     if !test_compilers() {
         println!("You need to have Bun and python3 installed to run this game");
     }
 
-    let utp = compiler::<languages::Python>("hello".to_string(), "print('helawlo!')".to_string());
-    println!("output: {}, success: {}", utp.output, utp.success);
+    // let utp = compiler::<languages::Python>("hello".to_string(), "print('helawlo!')".to_string());
+    // println!("output: {}, success: {}", utp.output, utp.success);
 
     let prob = Problem {
-        request: "Make the program output \"Hello test!\"".to_string(),
-        initial_problem: "fn main() {\n    println!(\"Hello, world!\");\n}".to_string(),
-        check_regex: "Hello test!".to_string(),
+        request: "Make the program compile. (problem stolen from rustlings)".to_string(),
+        initial_problem: "struct Book {\n    author: &str,\n    title: &str,\n}\n\nfn main() {\n    let book = Book {\n        author: \"George Orwell\",\n        title: \"1984\",\n    };\n\n    println!(\"{} by {}\", book.title, book.author);\n}".to_string(),
+        check_regex: "1984 by George Orwell".to_string(),
+        language: languages::Rust
     };
 
     let mut terminal = ratatui::init();
@@ -33,23 +35,30 @@ fn main() -> anyhow::Result<()> {
 
     let app_result = app.run(&mut terminal);
     ratatui::restore();
-    // app_result
     println!("{}", app.get_editor_content());
-    Ok(())
+
+    app_result
 }
 
-struct App {
+struct App<L>
+where
+    L: languages::Language,
+{
     editor: Editor,
     editor_area: Rect,
     counter: u8,
     exit: bool,
-    problem: Problem,
+    problem: Problem<L>,
     output: String,
     correct: bool,
+    start_time: SystemTime,
 }
 
-impl App {
-    fn new(problem: Problem) -> Self {
+impl<L> App<L>
+where
+    L: languages::Language,
+{
+    fn new(problem: Problem<L>) -> Self {
         App {
             editor: Editor::new("rust", &problem.initial_problem, vesper()),
             editor_area: Rect::default(),
@@ -58,6 +67,7 @@ impl App {
             problem,
             output: "Press f5 to check your code against the solution.".to_string(),
             correct: false,
+            start_time: SystemTime::now(),
         }
     }
 
@@ -117,10 +127,7 @@ impl App {
     }
 
     fn check(&mut self) {
-        let result = compiler::<languages::Rust>(
-            self.problem.check_regex.clone(),
-            self.get_editor_content(),
-        );
+        let result = compiler::<L>(&self.problem, self.get_editor_content());
 
         self.output = result.output;
         self.correct = result.success;
@@ -134,17 +141,22 @@ impl App {
         self.editor.set_content(content);
     }
 
-    fn get_status_bar(&self) -> Text {
+    fn get_status_bar(&self) -> Text<'_> {
+        let cur_time = SystemTime::now();
         let status = Text::raw(format!(
-            "Score: {}, Sucess: {}",
+            "Score: {}, Sucess: {}, Time Elapsed: {}",
             self.problem.diff(self.get_editor_content()),
-            self.correct
+            self.correct,
+            cur_time.duration_since(self.start_time).unwrap().as_secs()
         ));
         status
     }
 }
 
-impl Widget for &App {
+impl<L> Widget for &App<L>
+where
+    L: languages::Language,
+{
     fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
     where
         Self: Sized,
@@ -171,15 +183,26 @@ impl Widget for &App {
     }
 }
 
-struct Problem {
+struct Problem<L>
+where
+    L: languages::Language,
+{
     request: String,
     initial_problem: String,
+    language: L,
     check_regex: String,
 }
 
-impl Problem {
+impl<L> Problem<L>
+where
+    L: languages::Language,
+{
     fn diff(&self, comparison: String) -> usize {
         minimum_edit_distance(&self.initial_problem, &comparison)
+    }
+
+    fn get_regex(&self) -> &str {
+        &self.check_regex
     }
 }
 
@@ -246,12 +269,22 @@ struct CompilerReturn {
 mod languages {
     pub trait Language {
         fn format_command(file_name: &str) -> String;
+
+        fn name_string() -> String;
+
+        fn clean_up() -> String {
+            "".to_string()
+        }
     }
     pub struct Python;
 
     impl Language for Python {
         fn format_command(file_name: &str) -> String {
             format!("python3 {file_name}")
+        }
+
+        fn name_string() -> String {
+            "python".to_string()
         }
     }
 
@@ -261,10 +294,18 @@ mod languages {
         fn format_command(file_name: &str) -> String {
             format!("rustc {file_name} -o temp_prog && ./temp_prog")
         }
+
+        fn name_string() -> String {
+            "rust".to_string()
+        }
+
+        fn clean_up() -> String {
+            "./temp_prog".to_string()
+        }
     }
 }
 
-fn compiler<L>(regex: String, input: String) -> CompilerReturn
+fn compiler<L>(problem: &Problem<L>, input: String) -> CompilerReturn
 where
     L: languages::Language,
 {
@@ -280,12 +321,18 @@ where
 
     let error_or_message = String::from_utf8(pretty_print_output(utp)).unwrap();
 
-    let re = Regex::new(&regex).unwrap();
+    let re = Regex::new(&problem.get_regex()).unwrap();
 
     let cap = match re.captures(&error_or_message) {
         Some(t) => t.len() != 0,
         None => false,
     };
+
+    Command::new("sh")
+        .arg("-c")
+        .arg(format!("rm ./{name} {}", L::clean_up()))
+        .output()
+        .unwrap();
     // println!("Test: {}", error_or_message);
     return CompilerReturn {
         success: cap,
