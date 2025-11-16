@@ -17,7 +17,7 @@ use std::process::{Command, Output};
 use std::time::SystemTime;
 
 mod problems;
-use problems::{Language, Problem};
+use problems::{Language, Problem, create_problems};
 
 fn main() -> io::Result<()> {
     if !test_compilers() {
@@ -27,21 +27,7 @@ fn main() -> io::Result<()> {
     // let utp = compiler::<languages::Python>("hello".to_string(), "print('helawlo!')".to_string());
     // println!("output: {}, success: {}", utp.output, utp.success);
 
-    let prob1 = Problem {
-        request: "Make the program compile. (problem stolen from rustlings)".to_string(),
-        initial_problem: "struct Book {\n    author: &str,\n    title: &str,\n}\n\nfn main() {\n    let book = Book {\n        author: \"George Orwell\",\n        title: \"1984\",\n    };\n\n    println!(\"{} by {}\", book.title, book.author);\n}".to_string(),
-        check_regex: "1984 by George Orwell".to_string(),
-        language: Language::Rust
-    };
-
-    let prob2 = Problem {
-        request: "It's just hello world".to_string(),
-        initial_problem: "print('test')".to_string(),
-        check_regex: "Hello world".to_string(),
-        language: Language::Python,
-    };
-
-    let probs = vec![prob1, prob2].into_iter();
+    let probs = create_problems().into_iter();
 
     let mut terminal = ratatui::init();
     let mut app = App::new(probs);
@@ -254,14 +240,7 @@ fn test_compilers() -> bool {
     let output = Command::new("sh")
         .args([
             "-c",
-            "python3",
-            "--version",
-            "&&",
-            "bun",
-            "--version",
-            "&&",
-            "rustc",
-            "--version",
+            "python3 --version && bun --version && rustc --version",
         ])
         .output()
         .expect("Could not execute tests");
