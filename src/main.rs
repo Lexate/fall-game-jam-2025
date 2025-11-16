@@ -1,8 +1,10 @@
 #![expect(dead_code)]
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use ratatui::crossterm::event::ModifierKeyCode;
 use ratatui::layout::{Constraint, Flex, Layout};
+use ratatui::style::Stylize;
 use ratatui::text::Text;
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 use ratatui::{DefaultTerminal, Frame, layout::Position, layout::Rect, widgets::Widget};
 use ratatui_code_editor::editor::Editor;
 use ratatui_code_editor::theme::vesper;
@@ -46,7 +48,7 @@ fn main() -> io::Result<()> {
 
     let app_result = app.run(&mut terminal);
     ratatui::restore();
-    println!("{}", app.get_editor_content());
+    // println!("{}", app.get_editor_content());
 
     app_result
 }
@@ -61,6 +63,7 @@ struct App<T: Iterator<Item = Problem>> {
     output: String,
     correct: bool,
     start_time: SystemTime,
+    scroll: u16,
 }
 
 impl<T: Iterator<Item = Problem>> App<T> {
@@ -80,6 +83,7 @@ impl<T: Iterator<Item = Problem>> App<T> {
             output: "Press f5 to check your code against the solution.".to_string(),
             correct: false,
             start_time: SystemTime::now(),
+            scroll: 0,
         }
     }
 
@@ -118,10 +122,24 @@ impl<T: Iterator<Item = Problem>> App<T> {
         match key_event.code {
             KeyCode::Esc => self.exit(),
             KeyCode::F(5) => self.check(),
-            KeyCode::F(1) => self.next_problem(),
+            KeyCode::F(6) => self.next_problem(),
+            KeyCode::F(1) => self.dec_scroll(),
+            KeyCode::F(2) => self.inc_scroll(),
             _ => self.editor.input(key_event, &self.editor_area).unwrap(),
         }
         Ok(())
+    }
+
+    fn inc_scroll(&mut self) {
+        if self.scroll < u16::MAX {
+            self.scroll += 1;
+        }
+    }
+
+    fn dec_scroll(&mut self) {
+        if self.scroll > 0 {
+            self.scroll -= 1;
+        }
     }
 
     fn set_area(&mut self, area: Rect) {
@@ -172,12 +190,12 @@ impl<T: Iterator<Item = Problem>> App<T> {
         self.current_prob = prob;
     }
 
+    fn get_score(&self) -> usize {
+        self.current_prob.diff(self.get_editor_content())
+    }
+
     fn get_status_bar(&self) -> Text<'_> {
-        let cur_time = SystemTime::now();
-        let status = Text::raw(format!(
-            "Score: {}",
-            self.current_prob.diff(self.get_editor_content()),
-        ));
+        let status = Text::raw(format!("Score: {}", self.get_score(),));
         status
     }
 }
@@ -190,8 +208,8 @@ impl<T: Iterator<Item = Problem>> Widget for &App<T> {
         let areas = Layout::vertical([
             Constraint::Max(3),
             Constraint::Fill(1),
-            Constraint::Max(20),
-            Constraint::Max(1),
+            Constraint::Percentage(35),
+            Constraint::Length(1),
         ])
         .split(area);
         Paragraph::new(self.current_prob.request.clone())
@@ -202,16 +220,22 @@ impl<T: Iterator<Item = Problem>> Widget for &App<T> {
         self.editor.render(areas[1], buf);
 
         Paragraph::new(self.output.clone())
-            .block(Block::bordered().title("Output"))
+            .wrap(Wrap { trim: true })
+            .scroll((self.scroll, 0))
+            .block(Block::bordered().title("Output ( f1=↑ , f2=↓ )"))
             .render(areas[2], buf);
 
         Paragraph::new(self.get_status_bar()).render(areas[3], buf);
 
         if self.correct {
-            let block = Paragraph::new("weeee\nslask")
-                .centered()
-                .block(Block::bordered().title("popup"));
-            let popup_area = popup_area(area, 60, 20);
+            let block = Paragraph::new(format!(
+                "You solved the problem!\nScore: {}\n\nPress f6 to progress to the next problem",
+                self.get_score()
+            ))
+            .centered()
+            .block(Block::bordered().green());
+
+            let popup_area = popup_area(area, 40, 15);
             block.render(popup_area, buf);
         }
     }
